@@ -5,7 +5,6 @@ import sys
 import os.path
 from os import getenv
 from PyQt4 import QtCore, QtGui
-from base64 import decodestring
 from urllib import urlopen, urlretrieve, urlencode
 
 class Dialog(QtGui.QDialog): 
@@ -67,18 +66,6 @@ class Downloader(QtGui.QWidget):
         self.check.setChecked(True)
         
         aboutme = QtGui.QPushButton(u'About')
-        # UI
-#         layout=QtGui.QVBoxLayout()
-#         layout.addWidget(label1)
-#         layout.addWidget(self.line)
-#         layout.addWidget(label2)
-#         layout.addWidget(self.line2)
-#         layout.addWidget(button2)
-#         layout.addWidget(button)
-#         layout.addWidget(self.progress)
-#         layout.addWidget(t)
-#         self.setLayout(layout)
-#         
         # UI2
         layout = QtGui.QGridLayout()
         layout.addWidget(label1, 0, 0)
@@ -109,17 +96,25 @@ class Downloader(QtGui.QWidget):
             songid = URL
         else:
             songid = URL.split('/')[URL.split('/').index('song') + 1]
-        mediadown = 'http://huodong.duomi.com/songtaste/?songid=' + songid
-        mediapage = urlopen(mediadown).read()
-        pattern = re.compile(r'http://[0-9A-Za-z/\-\.]*\.(mp3|MP3)')
-        downloadURL = pattern.search(mediapage).group()
         try:
-            pattern2 = re.compile('var songname = "([A-Za-z0-9\+/=]*)"')
-            filename = decodestring(pattern2.search(mediapage).groups()[0])
-            # filename = pattern2.search(mediapage).groups()[0].decode('base64')
+            mediadown = 'http://huodong.duomi.com/songtaste/?songid=' + songid
+            mediapage = urlopen(mediadown).read()
+            pattern = re.compile(r'http://[0-9A-Za-z/\-\.]*\.(mp3|MP3)')
+            downloadURL = pattern.search(mediapage).group()
+            try:
+                pattern2 = re.compile('var songname = "([A-Za-z0-9\+/=]*)"')
+                #filename = decodestring(pattern2.search(mediapage).groups()[0])
+                filename = pattern2.search(mediapage).groups()[0].decode('base64')
+            except:
+#                 filename = decodestring(mediapage[mediapage.index(
+#                     'var songname') + 16:mediapage.index('var url') - 16])
+                filename=mediapage[mediapage.index(
+                     'var songname') + 16:mediapage.index('var url') - 16].decode('base64')
         except:
-            filename = decodestring(mediapage[mediapage.index(
-                'var songname') + 16:mediapage.index('var url') - 16])
+            page=urlopen("http://www.songtaste.com/song/"+songid).read()
+            strURL = re.compile(r'strURL = "([0-9a-z]*)"').search(page).groups()[0]
+            filename=re.compile(r'name:"(\w*)"').search(page).groups()[0]
+            downloadURL = urlopen('http://www.songtaste.com/time.php',data=urlencode({'str':strURL,'sid':songid,'t':0})).read()
         filetype = downloadURL.split('.')[-1]
         Info = (downloadURL, filetype, filename)
         return Info
@@ -127,8 +122,14 @@ class Downloader(QtGui.QWidget):
     def download(self, info, path):
         self.t.append(u'开始下载 :' + info[2])
         filepath = path + '%s' % info[2] + '.' + info[1]
+        if path.exists(filepath):
+            for i in range(1,sys.maxint):
+                filepath=path + '%s' % info[2]+'('+i+')' + '.' + info[1]
+                if not path.exists(filepath):
+                    break
+            self.t.append(u"该目录下存在重名文件，文件名改为"+info[2]+'('+i+')'+info[1])
         try:
-            a, b = urlretrieve(info[0], filepath, self.cbk)
+            urlretrieve(info[0], filepath, self.cbk)
         except:
             DialogwithoutConfirm(title = 'Error', message = u"程序故障@download =w= Please Mail to jackyzy823@gmail.com")
         self.t.append(u'下载完成:' + info[2])
@@ -154,11 +155,10 @@ class Downloader(QtGui.QWidget):
         path = self.line2.text() + '\\'
         try:
             info = self.Media(me)
-        except:
             if info[0].find('rafile') != -1:
                 DialogwithoutConfirm(title = 'Error', message = u"不支持rayfile源的歌曲 抱歉。")
-            else:
-                DialogwithoutConfirm(title = 'Error', message = u"程序故障@songid =w= Please Mail to jackyzy823@gmail.com")
+        except:
+            DialogwithoutConfirm(title = 'Error', message = u"程序故障@songid =w= Please Mail to jackyzy823@gmail.com")
         if self.check.checkState() == 2:
             res = Dialog(parent = self, message = u"文件大小为   %.2f MB" % self.getSize(info)).exec_()
             if res == 1:
@@ -166,11 +166,10 @@ class Downloader(QtGui.QWidget):
         else:
             # DialogwithoutConfirm(parent=None,title="Error",message=me).exec_()
             self.download(info, path)
-#         print dia.exec_()
+
     
     def getPath(self):
         selectfile = QtGui.QFileDialog.getExistingDirectory()
-#         selectfile=QtGui.QFileDialog.directory()
         if selectfile != "":
             self.line2.setText(selectfile)
     
